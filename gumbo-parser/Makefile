@@ -1,4 +1,4 @@
-.PHONY: all clean check coverage
+.PHONY: all clean check fuzz coverage
 
 gumbo_objs := $(patsubst %.c,build/%.o,$(wildcard src/*.c))
 test_objs := $(patsubst %.cc,build/%.o,$(wildcard test/*.cc))
@@ -22,17 +22,26 @@ build/src:
 build/test:
 	mkdir -p $@
 
+build/fuzz:
+	mkdir -p $@
+
 build/src/%.o: src/%.c build/src/flags | build/src
 	$(CC) -MMD $(CPPFLAGS) $(CFLAGS) $(SANITIZEFLAGS) -c -o $@ $<
 
 build/test/%.o: test/%.cc build/test/flags | build/test
 	$(CXX) -MMD $(CPPFLAGS) $(CXXFLAGS) $(SANITIZEFLAGS) -c -o $@ $<
 
+build/afl_wrapper: $(wildcard src/*.c) fuzz/afl_wrapper.c | build/fuzz
+	AFL_HARDEN=1 afl-clang $(CPPFLAGS) $(CFLAGS) -fsanitize=undefined -fsanitize=address $^ -o $@
+
 build/run_tests: $(gumbo_objs) $(test_objs) $(gtest_lib)
 	$(CXX) -o $@ $+ $(LDFLAGS) $(SANITIZEFLAGS)
 
 check: build/run_tests
 	./build/run_tests
+
+fuzz: build/afl_wrapper
+	./fuzz/afl_run.sh
 
 coverage:
 	$(RM) build/{src,test}/*.gcda
