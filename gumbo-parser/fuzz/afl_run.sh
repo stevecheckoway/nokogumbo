@@ -20,8 +20,8 @@ cleanup() {
 trap "cleanup" EXIT
 
 for i in {1..3}; do
-  afl-fuzz -x "${dictionary}" -i "${dir}/afl" -o "${output}" -S "fuzzer${i}" -- "${afl_wrapper}" @@ >/dev/null 2>/dev/null &
+  UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1 afl-fuzz -x "${dictionary}" -i "${dir}/afl" -o "${output}" -S "fuzzer${i}" -- "${afl_wrapper}" @@ >/dev/null 2>/dev/null &
   pid["$i"]=$!
 done
 
-afl-fuzz -x "${dictionary}" -i "${dir}/afl" -o "${output}" -M fuzzer0 -- "${afl_wrapper}" @@
+UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1 afl-fuzz -x "${dictionary}" -i "${dir}/afl" -o "${output}" -M fuzzer0 -- "${afl_wrapper}" @@

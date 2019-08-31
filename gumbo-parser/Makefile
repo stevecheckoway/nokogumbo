@@ -39,7 +39,7 @@ build/afl_wrapper: $(gumbo_objs) $(fuzz_objs)
 	$(CC) -o $@ $+ $(LDFLAGS) $(SANITIZEFLAGS)
 
 wrapper: | build/fuzz
-	CC='AFL_HARDEN=1 afl-clang -fsanitize=undefined -fsanitize=address' $(MAKE) build/afl_wrapper
+	CC='AFL_USE_ASAN=1 afl-clang -fsanitize=undefined -g' $(MAKE) build/afl_wrapper
 
 build/run_tests: $(gumbo_objs) $(test_objs) $(gtest_lib)
 	$(CXX) -o $@ $+ $(LDFLAGS) $(SANITIZEFLAGS)
