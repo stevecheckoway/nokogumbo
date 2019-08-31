@@ -2,6 +2,7 @@
 
 gumbo_objs := $(patsubst %.c,build/%.o,$(wildcard src/*.c))
 test_objs := $(patsubst %.cc,build/%.o,$(wildcard test/*.cc))
+fuzz_objs := $(patsubst %.c,build/%.o,$(wildcard fuzz/*.c))
 gtest_lib := googletest/make/gtest_main.a
 
 # make SANITIZEFLAGS='-fsanitize=undefined -fsanitize=address'
@@ -31,8 +32,14 @@ build/src/%.o: src/%.c build/src/flags | build/src
 build/test/%.o: test/%.cc build/test/flags | build/test
 	$(CXX) -MMD $(CPPFLAGS) $(CXXFLAGS) $(SANITIZEFLAGS) -c -o $@ $<
 
-build/afl_wrapper: $(wildcard src/*.c) fuzz/afl_wrapper.c | build/fuzz
-	AFL_HARDEN=1 afl-clang $(CPPFLAGS) $(CFLAGS) -fsanitize=undefined -fsanitize=address $^ -o $@
+build/fuzz/%.o: fuzz/%.c  build/src/flags | build/fuzz
+	$(CC) -MMD $(CPPFLAGS) $(CFLAGS) $(SANITIZEFLAGS) -c -o $@ $<
+
+build/afl_wrapper: $(gumbo_objs) $(fuzz_objs)
+	$(CC) -o $@ $^
+
+wrapper: | build/fuzz
+	CC='AFL_HARDEN=1 afl-clang -fsanitize=undefined -fsanitize=address' $(MAKE) build/afl_wrapper
 
 build/run_tests: $(gumbo_objs) $(test_objs) $(gtest_lib)
 	$(CXX) -o $@ $+ $(LDFLAGS) $(SANITIZEFLAGS)
@@ -40,7 +47,7 @@ build/run_tests: $(gumbo_objs) $(test_objs) $(gtest_lib)
 check: build/run_tests
 	./build/run_tests
 
-fuzz: build/afl_wrapper
+fuzz: wrapper
 	./fuzz/afl_run.sh
 
 coverage:
@@ -95,7 +102,7 @@ build/test/flags: | build/test
 	@echo 'old_SANITIZEFLAGS := $(SANITIZEFLAGS)' >> $@
 	@echo 'old_LDFLAGS := $(LDFLAGS)' >> $@
 
-ifeq (,$(filter clean coverage,$(MAKECMDGOALS)))
+ifeq (,$(filter clean coverage wrapper fuzz,$(MAKECMDGOALS)))
 # Ensure that the flags are up to date.
 -include build/src/flags build/test/flags
 ifneq ($(old_CC) | $(old_CPPFLAGS) | $(old_CFLAGS) | $(old_SANITIZEFLAGS) | $(old_LDFLAGS),$(CC) | $(CPPFLAGS) | $(CFLAGS) | $(SANITIZEFLAGS) | $(LDFLAGS))
@@ -106,5 +113,5 @@ ifneq ($(old_CXX) | $(old_CPPFLAGS) | $(old_CXXFLAGS) | $(old_SANITIZEFLAGS) | $
 endif
 
 # Include dependencies.
--include $(test_objs:.o=.d) $(gumbo_objs:.o=.d)
+-include $(test_objs:.o=.d) $(gumbo_objs:.o=.d) $(fuzz_objs:.o=.d)
 endif
