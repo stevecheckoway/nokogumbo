@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
   size_t input_len = lseek(fd, 0, SEEK_END);
   (void)lseek(fd, 0, SEEK_SET);
 
-  size_t page_mask = getpagesize() - 1;
+  size_t page_mask = sysconf(_SC_PAGESIZE) - 1;
   size_t size = (input_len + page_mask) & ~page_mask;
   char *str = mmap(0, size, PROT_READ, MAP_FILE | MAP_PRIVATE, fd, 0);
   
