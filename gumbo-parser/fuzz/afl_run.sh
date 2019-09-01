@@ -4,7 +4,11 @@ set -e
 
 prefix=$(which afl-fuzz)
 prefix=${prefix/\/bin\/afl-fuzz}
-dictionary="${prefix}/share/afl/html_tags.dict"
+if [[ -f "${prefix}/share/afl/html_tags.dict" ]]; then
+  dictionary="${prefix}/share/afl/html_tags.dict"
+elif [[ -f "${prefix}/share/afl/dictionaries/html_tags.dict" ]]; then
+  dictionary="${prefix}/share/afl/dictionaries/html_tags.dict"
+fi
 dir=$(dirname "$0")
 output="${dir}/afl_output"
 afl_wrapper="${dir}/../build/afl_wrapper"
