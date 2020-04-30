@@ -3,24 +3,13 @@
 #include "rb_tree.h"
 
 #include <assert.h>
-#include <limits.h>
 #include <string.h>
 
 #include "util.h"
 
-struct rb_node {
-  struct rb_node *left;
-  struct rb_node *right;
-  // Most significant bit of key_length is 1 for a red node.
-  size_t key_length;
-  char const *key;
-};
-
+// Don't put this in the header because there's no reason to expose it but we
+// do need its value in the header so just duplicate the code.
 #define COLOR_MASK ((size_t){1} << (sizeof(size_t) * CHAR_BIT - 1))
-
-static bool rb_is_red(rb_node const *node) {
-  return node && (node->key_length & COLOR_MASK);
-}
 
 static void rb_set_red(rb_node *node) {
   if (node)
@@ -39,10 +28,6 @@ static rb_node *rb_new_node(size_t key_length, char const *key) {
   node->key_length = key_length;
   node->key = key;
   return node;
-}
-
-static size_t rb_key_length(rb_node const *node) {
-  return node->key_length & ~COLOR_MASK;
 }
 
 // Returns < 0 if node's key is lexicographically before key.

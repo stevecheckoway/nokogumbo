@@ -1,7 +1,7 @@
 /*
  Copyright 2010 Google Inc.
  Copyright 2017-2018 Craig Barnes
- Copyright 2018 Stephen Checkoway
+ Copyright 2018-2020 Stephen Checkoway
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -52,6 +52,7 @@
 #include "error.h"
 #include "gumbo.h"
 #include "parser.h"
+#include "rb_tree.h"
 #include "string_buffer.h"
 #include "token_type.h"
 #include "tokenizer_states.h"
@@ -192,6 +193,10 @@ typedef struct GumboInternalTokenizerState {
 
   // The UTF8Iterator over the tokenizer input.
   Utf8Iterator _input;
+
+  // Attribute cache. Duplicated attributes are ignored so we need a fast way
+  // to look up which attributes we've already seen for a given element.
+  rb_node* _attribute_cache;
 } GumboTokenizerState;
 
 // Adds a parse error to the parser's error struct.
@@ -684,6 +689,9 @@ static void start_new_tag(GumboParser* parser, bool is_start_tag) {
 
   initialize_tag_buffer(parser);
 
+  rb_free(tokenizer->_attribute_cache);
+  tokenizer->_attribute_cache = NULL;
+
   assert(tag_state->_name == NULL);
   assert(tag_state->_attributes.data == NULL);
   // Initial size chosen by statistical analysis of a corpus of 60k webpages.
@@ -789,28 +797,28 @@ static void finish_attribute_name(GumboParser* parser) {
   assert(tag_state->_attributes.data);
   assert(tag_state->_attributes.capacity);
 
-  GumboVector* /* GumboAttribute* */ attributes = &tag_state->_attributes;
-  for (unsigned int i = 0; i < attributes->length; ++i) {
-    GumboAttribute* attr = attributes->data[i];
-    if (
-      strlen(attr->name) == tag_state->_buffer.length
-      && 0 == memcmp (
-        attr->name,
-        tag_state->_buffer.data,
-        tag_state->_buffer.length
-      )
-    ) {
-      // Identical attribute; bail.
-      add_duplicate_attr_error(parser);
-      reinitialize_tag_buffer(parser);
-      tag_state->_drop_next_attr_value = true;
-      return;
-    }
+  char const* attr_name;
+  copy_over_tag_buffer(parser, &attr_name);
+
+  // Check for duplicate attributes.
+  if (
+    !rb_insert(
+      &tokenizer->_attribute_cache,
+      tag_state->_buffer.length,
+      attr_name
+     )
+  ) {
+    // Duplicate attribute.
+    gumbo_free((char *)attr_name);
+    add_duplicate_attr_error(parser);
+    reinitialize_tag_buffer(parser);
+    tag_state->_drop_next_attr_value = true;
+    return;
   }
 
   GumboAttribute* attr = gumbo_alloc(sizeof(GumboAttribute));
   attr->attr_namespace = GUMBO_ATTR_NAMESPACE_NONE;
-  copy_over_tag_buffer(parser, &attr->name);
+  attr->name = attr_name;
   copy_over_original_tag_text (
     parser,
     &attr->original_name,
@@ -824,7 +832,7 @@ static void finish_attribute_name(GumboParser* parser) {
     &attr->name_start,
     &attr->name_end
   );
-  gumbo_vector_add(attr, attributes);
+  gumbo_vector_add(attr, &tag_state->_attributes);
   reinitialize_tag_buffer(parser);
 }
 
@@ -884,6 +892,8 @@ void gumbo_tokenizer_state_init (
   utf8iterator_init(parser, text, text_length, &tokenizer->_input);
   utf8iterator_get_position(&tokenizer->_input, &tokenizer->_token_start_pos);
   doc_type_state_init(parser);
+
+  tokenizer->_attribute_cache = NULL;
 }
 
 void gumbo_tokenizer_state_destroy(GumboParser* parser) {
@@ -894,6 +904,7 @@ void gumbo_tokenizer_state_destroy(GumboParser* parser) {
   gumbo_string_buffer_destroy(&tokenizer->_temporary_buffer);
   assert(tokenizer->_tag_state._name == NULL);
   assert(tokenizer->_tag_state._attributes.data == NULL);
+  rb_free(tokenizer->_attribute_cache);
   gumbo_free(tokenizer);
 }
 

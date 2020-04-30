@@ -1,6 +1,7 @@
 #ifndef RB_TREE_H
 #define RB_TREE_H
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -8,7 +9,25 @@
 extern "C" {
 #endif
 
-typedef struct rb_node rb_node;
+typedef struct rb_node {
+  struct rb_node *left;
+  struct rb_node *right;
+  // Most significant bit of key_length is 1 for a red node.
+  size_t key_length;
+  char const *key;
+} rb_node;
+
+// Returns the actual length of the key.
+static inline size_t rb_key_length(rb_node const *node) {
+  const size_t mask = (size_t){1} << (sizeof(size_t) * CHAR_BIT - 1);
+  return node->key_length & ~mask;
+}
+
+// Returns true if the node is red.
+static inline bool rb_is_red(rb_node const *node) {
+  const size_t mask = (size_t){1} << (sizeof(size_t) * CHAR_BIT - 1);
+  return node && (node->key_length & mask);
+}
 
 // Perform a top-down insertion into the tree. Returns true if the key was
 // inserted into the tree and false otherwise. A copy of the key is not
